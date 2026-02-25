@@ -55,7 +55,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Iltimos, menyudagi tugmalardan foydalaning.")
 
 if __name__ == '__main__':
-    TOKEN = "8615427119:AAG3rXwxXGqvhVBzV-VSrHQllpco3CMqaQ"
+    TOKEN = "8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ"
     
     keep_alive()
     
@@ -65,3 +65,4 @@ if __name__ == '__main__':
     
     print("Bot ishga tushdi...")
     application.run_polling()
+
