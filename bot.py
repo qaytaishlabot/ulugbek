@@ -65,10 +65,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     # Tokenni o'zingizniki bilan tekshirib oling
-    TOKEN = "8615427119:AAG3rXwxXGqvhVBzV-VSrHQllpco3CMqaQ"
+    TOKEN = "8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ"
     
     keep_alive()
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.run_polling()
+
