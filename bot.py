@@ -63,10 +63,11 @@ def handle_msg(message):
         bot.send_message(message.chat.id, "Iltimos, menyudagi tugmalardan foydalaning.")
 
 # 4. ISHGA TUSHIRISH (Xatosiz formatda)
-if name == "__main__":
+if __name__ == "__main__":
     # Flaskni alohida oqimda yurgizamiz
     t = Thread(target=run_flask)
     t.start()
     
     print("Bot polling boshlandi...")
     bot.infinity_polling()
+
