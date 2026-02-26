@@ -4,19 +4,18 @@ import os
 from flask import Flask
 from threading import Thread
 
-# 1. BOT SOZLAMALARI
-TOKEN = '8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ'
+# 1. TOKENINGIZNI SHU YERGA TO'G'RI QO'YING
+TOKEN = '8615427119:AAEnQffiDdQ1NHRHa1e3GLDqDsZEBymy7jg'
 bot = telebot.TeleBot(TOKEN)
 
-# 2. RENDER UCHUN PORT (HIYLA)
+# 2. RENDER UCHUN FLASK (PORT BINDING)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot yoniq!"
+    return "Bot is alive!"
 
 def run_flask():
-    # Render avtomatik port beradi, bo'lmasa 8080 ishlatamiz
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -29,22 +28,20 @@ def start(message):
     btn3 = types.KeyboardButton("📜 Qoidalar")
     btn4 = types.KeyboardButton("ℹ️ Bot haqida")
     markup.add(btn1, btn2, btn3, btn4)
-    bot.send_message(message.chat.id, "Xush kelibsiz! Bot stabil rejimda ishlayapti.", reply_markup=markup)
+    bot.send_message(message.chat.id, "Xush kelibsiz! Bot hozir ishlayapti.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def handle_msg(message):
     if "Axlat tashlash" in message.text:
-        bot.send_message(message.chat.id, "📸 Rasm yuboring, adminlar tekshiradi.")
-    elif "Sovg'alar" in message.text:
-        bot.send_message(message.chat.id, "🎁 Sovg'alar: Ruchka, Daftar, Kitob.")
+        bot.send_message(message.chat.id, "📸 Iltimos, rasm yuboring.")
     else:
-        bot.send_message(message.chat.id, "Iltimos, menyudan foydalaning.")
+        bot.send_message(message.chat.id, "Pastdagi menyudan foydalaning.")
 
-# 4. BOTNI VA FLASKNI BIRGA ISHLATISH
-if __name__ == "__main__":
-    # Flaskni alohida oqimda (thread) yurgizamiz
+# 4. ISHGA TUSHIRISH
+if name == "__main__":
+    # Flaskni alohida oqimda yurgizamiz
     t = Thread(target=run_flask)
     t.start()
     
-    print("Bot ishga tushdi...")
+    print("Bot polling boshlandi...")
     bot.infinity_polling()
