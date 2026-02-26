@@ -1,91 +1,50 @@
 import telebot
 from telebot import types
-import sqlite3
+import os
+from flask import Flask
+from threading import Thread
 
-# Tokeningiz o'rnatilgan
-TOKEN = '8615427119:AAEnQffiDdQ1NHRHa1e3GLDqDsZEBymy7jg'
+# 1. BOT SOZLAMALARI
+TOKEN = '8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ'
 bot = telebot.TeleBot(TOKEN)
 
-# Ma'lumotlar bazasini sozlash
-def init_db():
-    conn = sqlite3.connect('eco_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users 
-                      (id INTEGER PRIMARY KEY, name TEXT, points INTEGER DEFAULT 0)''')
-    conn.commit()
-    conn.close()
+# 2. RENDER UCHUN PORT (HIYLA)
+app = Flask('')
 
-# Foydalanuvchi ballini olish
-def get_points(user_id):
-    conn = sqlite3.connect('eco_bot.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT points FROM users WHERE id = ?", (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else 0
+@app.route('/')
+def home():
+    return "Bot yoniq!"
 
-# Reytingni olish (TOP 10)
-def get_top():
-    conn = sqlite3.connect('eco_bot.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, points FROM users WHERE points > 0 ORDER BY points DESC LIMIT 10")
-    top = cursor.fetchall()
-    conn.close()
-    return top
+def run_flask():
+    # Render avtomatik port beradi, bo'lmasa 8080 ishlatamiz
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
+# 3. BOT FUNKSIYALARI
 @bot.message_handler(commands=['start'])
 def start(message):
-    init_db()
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("📝 Ro'yxatdan o'tish")
-    markup.add("🗑 Axlat tashlash", "🎁 Sovg'alar")
-    markup.add("⭐ Ballarim", "🏆 Reyting")
-    markup.add("📜 Qoidalar", "ℹ️ Bot haqida")
-    bot.send_message(message.chat.id, "Xush kelibsiz! Maqsadi tabiatni asrash bo'lgan loyiha botiga xush kelibsiz.", reply_markup=markup)
+    btn1 = types.KeyboardButton("🗑 Axlat tashlash")
+    btn2 = types.KeyboardButton("🎁 Sovg'alar")
+    btn3 = types.KeyboardButton("📜 Qoidalar")
+    btn4 = types.KeyboardButton("ℹ️ Bot haqida")
+    markup.add(btn1, btn2, btn3, btn4)
+    bot.send_message(message.chat.id, "Xush kelibsiz! Bot stabil rejimda ishlayapti.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
-def handle_menu(message):
-    msg = message.text
-    user_id = message.from_user.id
+def handle_msg(message):
+    if "Axlat tashlash" in message.text:
+        bot.send_message(message.chat.id, "📸 Rasm yuboring, adminlar tekshiradi.")
+    elif "Sovg'alar" in message.text:
+        bot.send_message(message.chat.id, "🎁 Sovg'alar: Ruchka, Daftar, Kitob.")
+    else:
+        bot.send_message(message.chat.id, "Iltimos, menyudan foydalaning.")
 
-    if "Axlat tashlash" in msg:
-        bot.send_message(message.chat.id, "Iltimos, rasm yuboring! 📸 Adminlar tekshirib ball berishadi.")
-    
-    elif "Ballarim" in msg:
-        p = get_points(user_id)
-        bot.send_message(message.chat.id, f"Sizning hozirgi ballingiz: {p} ball. ⭐")
-    
-    elif "Reyting" in msg:
-        top_list = get_top()
-        if not top_list:
-            bot.send_message(message.chat.id, "🏆 Reyting hali shakllanmadi (ball olganlar yo'q).")
-        else:
-            text = "🏆 TOP Foydalanuvchilar:\n\n"
-            for i, (name, pts) in enumerate(top_list, 1):
-                text += f"{i}. {name} — {pts} ball\n"
-            bot.send_message(message.chat.id, text)
-
-    elif "Sovg'alar" in msg:
-        bot.send_message(message.chat.id, "🎁 Sovg'alar:\n• 30 ball — Ruchka\n• 50 ball — Daftar\n• 75 ball — Kitob")
-    
-    elif "Qoidalar" in msg:
-        bot.send_message(message.chat.id, "📜 Qoida: Rasmni aniq oling va admin javobini kuting.")
-
-    elif "Ro'yxatdan o'tish" in msg:
-        m = bot.send_message(message.chat.id, "Ism va familiyangizni yuboring:")
-        bot.register_next_step_handler(m, save_user)
-
-def save_user(message):
-    conn = sqlite3.connect('eco_bot.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO users (id, name, points) VALUES (?, ?, ?)", 
-                   (message.from_user.id, message.text, get_points(message.from_user.id)))
-    conn.commit()
-    conn.close()
-    bot.send_message(message.chat.id, f"Rahmat, {message.text}! Ro'yxatga olindi.")
-
+# 4. BOTNI VA FLASKNI BIRGA ISHLATISH
 if __name__ == "__main__":
-    init_db()
+    # Flaskni alohida oqimda (thread) yurgizamiz
+    t = Thread(target=run_flask)
+    t.start()
+    
+    print("Bot ishga tushdi...")
     bot.infinity_polling()
-
-
