@@ -1,94 +1,78 @@
+import telebot
+from telebot import types
 
-import os
-from flask import Flask
-from threading import Thread
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+# Botingiz tokeni o'rnatildi
+TOKEN = '8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ'
+bot = telebot.TeleBot(TOKEN)
 
-# 1. Render uchun server (Bot o'chib qolmasligi uchun)
-app = Flask('')
-@app.route('/')
-def home(): return "Bot yoniq!"
-
-def run():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    Thread(target=run).start()
-
-# 2. ASOSIY MA'LUMOTLAR
-ADMIN_ID = 7543961611 
-user_scores = {}  # Ballarni saqlash
-user_names = {}   # Ismlarni saqlash
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ['📝 Ro\'yxatdan o\'tish'],
-        ['🗑 Axlat tashlash', '🎁 Sovg\'alar'],
-        ['⭐ Ballarim', '🏆 Reyting'],
-        ['📜 Qoidalar', 'ℹ️ Bot haqida']
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "Xush kelibsiz! Maqsadi tabiatni asrash bo'lgan loyihamiz botiga xush kelibsiz.", 
-        reply_markup=reply_markup
-    )
-
-# 3. ADMIN UCHUN BALL BERISH (Masalan: /ball 12345 10)
-async def add_ball(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
-    try:
-        u_id = int(context.args[0])
-        score = int(context.args[1])
-        user_scores[u_id] = user_scores.get(u_id, 0) + score
-        await update.message.reply_text(f"✅ ID {u_id} ga {score} ball qo'shildi.")
-    except:
-        await update.message.reply_text("Xato! Namuna: /ball [ID] [miqdor]")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    user = update.effective_user
-    uid = user.id
-
-    if text == "📝 Ro'yxatdan o'tish":
-        await update.message.reply_text("Ism va Familiyangizni yozib yuboring:")
-        context.user_data['step'] = 'reg'
+# Start komandasi va menyuni yaratish
+@bot.message_handler(commands=['start'])
+def start(message):
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     
-    elif text == "🏆 Reyting":
-        # Faqat balli bor va ismi saqlanganlarni ko'rsatish
-        active = {user_names[i]: s for i, s in user_scores.items() if s > 0 and i in user_names}
-        if not active:
-            await update.message.reply_text("🏆 Reyting hali shakllanmadi.")
-        else:
-            sorted_res = sorted(active.items(), key=lambda x: x[1], reverse=True)
-            msg = "🏆 TOP O'QUVCHILAR:\n\n"
-            for i, (name, score) in enumerate(sorted_res, 1):
-                msg += f"{i}. {name} — {score} ball\n"
-            await update.message.reply_text(msg)
-
-    elif text == "⭐ Ballarim":
-        await update.message.reply_text(f"Sizning ballingiz: {user_scores.get(uid, 0)} ball.")
-
-    elif text == "ℹ️ Bot haqida":
-        await update.message.reply_text("Maqsad: Atrof-muhitni asrash. Asoschi: Z.Ulugbek")
-
-    elif context.user_data.get('step') == 'reg':
-        user_names[uid] = text
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"📂 YANGI: {text}\n🆔 ID: {uid}")
-        await update.message.reply_text("✅ Ro'yxatdan o'tdingiz!")
-        context.user_data['step'] = None 
+    # Tugmalar rasmda ko'ringandek tartibda
+    btn1 = types.KeyboardButton("📝 Ro'yxatdan o'tish")
+    btn2 = types.KeyboardButton("🗑 Axlat tashlash")
+    btn3 = types.KeyboardButton("🎁 Sovg'alar")
+    btn4 = types.KeyboardButton("⭐ Ballarim")
+    btn5 = types.KeyboardButton("📜 Qoidalar")
+    btn6 = types.KeyboardButton("ℹ️ Bot haqida")
+    btn7 = types.KeyboardButton("🏆 Reyting")
     
+    # Tugmalarni joylashtirish
+    markup.add(btn1)
+    markup.add(btn2, btn3)
+    markup.add(btn4, btn7)
+    markup.add(btn5, btn6)
+    
+    bot.send_message(message.chat.id, "Xush kelibsiz! Kerakli bo'limni tanlang:", reply_markup=markup)
+
+# Tugmalarni tutib olish
+@bot.message_handler(func=lambda message: True)
+def handle_menu(message):
+    # Har bir shart tugmadagi matn va emoji bilan aynan bir xil
+    
+    if message.text == "🗑 Axlat tashlash":
+        bot.send_message(message.chat.id, "Iltimos, axlatni rasmga olib yuboring! 📸 Adminlar tekshirgach, sizga ball beriladi.")
+        
+    elif message.text == "🎁 Sovg'alar":
+        sovgalar_text = (
+            "🎁 Sovg'alar ro'yxati:\n\n"
+            "• 30 ball — Ruchka 🖊\n"
+            "• 50 ball — Daftar 📓\n"
+            "• 75 ball — Kitob 📚\n\n"
+            "Ballaringiz yetarli bo'lganda admin bilan bog'laning!"
+        )
+        bot.send_message(message.chat.id, sovgalar_text)
+        
+    elif message.text == "📜 Qoidalar":
+        qoidalar_text = (
+            "📜 Botdan foydalanish qoidalari:\n\n"
+            "1. Axlatni maxsus joyga tashlang va rasmga oling.\n"
+            "2. Rasmni botga yuboring (haqqoniy bo'lsin).\n"
+            "3. Adminlar tekshirgach, hisobingizga ball qo'shiladi.\n"
+            "4. To'plangan ballarni sovg'alarga almashtiring!"
+        )
+        bot.send_message(message.chat.id, qoidalar_text)
+        
+    elif message.text == "⭐ Ballarim":
+        # Hozircha statik 0 ball, bazani ulaganingizda bu qism o'zgaradi
+        bot.send_message(message.chat.id, "Sizning hozirgi ballingiz: 0 ball. ⭐")
+        
+    elif message.text == "ℹ️ Bot haqida":
+        bot.send_message(message.chat.id, "Maqsad: Atrof-muhitni asrash va yoshlarni rag'batlantirish.\nAsoschi: Z.Ulugbek")
+        
+    elif message.text == "🏆 Reyting":
+        bot.send_message(message.chat.id, "🏆 Reyting shakllantirilmoqda. Tez orada eng faol foydalanuvchilarni ko'rishingiz mumkin.")
+
+    elif message.text == "📝 Ro'yxatdan o'tish":
+        bot.send_message(message.chat.id, "Ism va familiyangizni yuboring (masalan: Ali Valiyev).")
+
     else:
-        await update.message.reply_text("Iltimos, menyudan foydalaning.")
+        # Agar tugmadan tashqari narsa yozilsa
+        bot.send_message(message.chat.id, "Iltimos, pastdagi menyu tugmalaridan foydalaning.")
 
-if __name__ == '__main__':
-    # TOKENNI ORTIQCHA JOYSIZ (PROBELSIZ) QO'YING
-    TOKEN = "8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ"
-    
-    keep_alive()
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("ball", add_ball))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.run_polling(drop_pending_updates=True) # ESKI XABARLARNI O'CHIRIB TASHLASH
+# Botni ishga tushirish
+if __name__ == "__main__":
+    print("Bot Render serverida ishga tushishga tayyor...")
+    bot.infinity_polling()
