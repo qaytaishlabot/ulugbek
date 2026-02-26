@@ -2,7 +2,7 @@ import telebot
 from telebot import types
 
 # --- SOZLAMALAR ---
-API_TOKEN = '8615427119:AAF44PaCDQCHIMHfzOGkx_QMGJCAaxrUBGA' # Bu yerga botfather bergan tokenni qo'ying
+API_TOKEN = '8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo' # Bu yerga botfather bergan tokenni qo'ying
 ADMIN_ID = 7543961611  # Sizning ID raqamingiz joylandi
 bot = telebot.TeleBot(API_TOKEN)
 
@@ -114,4 +114,5 @@ def callback_handler(call):
 if __name__ == "__main__":
     print("Bot muvaffaqiyatli ishga tushdi...")
     bot.polling(none_stop=True)
+
 
