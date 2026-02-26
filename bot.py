@@ -22,12 +22,11 @@ GIFTS = {
     "kitob":  {"name": "📚 Kitob", "price": 80}
 }
 
-# --- 2. WEBSERVER (RENDER UCHUN) ---
 @app.route('/')
 def home():
     return "Bot tirik!"
 
-# --- 3. MENU TUGMALARI ---
+# --- 2. MENU TUGMALARI ---
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("🎁 Sovg'alar", "💰 Mening ballarim")
@@ -40,100 +39,102 @@ def registration_button():
     markup.add("📝 Ro'yxatdan o'tish")
     return markup
 
-# --- 4. BOT MANTIQI ---
+# --- 3. BOT MANTIQI ---
 
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
     if user_id not in users_data or not users_data[user_id].get('registered'):
-        bot.send_message(message.chat.id, 
-                         "Xush kelibsiz! Botdan foydalanish uchun avval ro'yxatdan o'tishingiz kerak. \nPastdagi tugmani bosing:", 
-                         reply_markup=registration_button())
+        bot.send_message(message.chat.id, "Xush kelibsiz! Botdan foydalanish uchun avval ro'yxatdan o'ting:", reply_markup=registration_button())
     else:
-        name = users_data[user_id]['name']
-        bot.send_message(message.chat.id, f"Salom {name}, xush kelibsiz!", reply_markup=main_menu())
+        bot.send_message(message.chat.id, "Asosiy menyu:", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda message: message.text == "📝 Ro'yxatdan o'tish")
 def ask_name(message):
-    bot.send_message(message.chat.id, "Ism va familiyangizni kiriting (Masalan: Ali Valiyev):")
+    bot.send_message(message.chat.id, "Ism va familiyangizni kiriting:")
     bot.register_next_step_handler(message, process_registration)
 
 def process_registration(message):
     user_id = message.from_user.id
     full_name = message.text
-    
-    if len(full_name.split()) < 2:
-        bot.send_message(message.chat.id, "Iltimos, ism VA familiyangizni to'liq kiriting:")
-        bot.register_next_step_handler(message, process_registration)
-        return
-
-    # Adminga yuborish uchun tugmalar
+    # Adminga tasdiqlash uchun yuborish
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Tasdiqlash ✅", callback_data=f"reg_ok_{user_id}_{full_name}"),
                types.InlineKeyboardButton("Rad etish ❌", callback_data=f"reg_no_{user_id}"))
+    bot.send_message(ADMIN_ID, f"🆕 Ro'yxatdan o'tish:\n👤 {full_name}\n🆔 {user_id}", reply_markup=markup)
+    bot.send_message(message.chat.id, "Ma'lumotlaringiz yuborildi. Admin tasdiqlashini kuting.")
+
+# --- Rasm qabul qilish ---
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    user_id = message.from_user.id
+    if user_id not in users_data or not users_data[user_id].get('registered'):
+        bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!")
+        return
+
+    name = users_data[user_id].get('name', 'Noma\'lum')
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("Tasdiqlash ✅", callback_data=f"pic_ok_{user_id}"),
+               types.InlineKeyboardButton("Rad etish ❌", callback_data=f"pic_no_{user_id}"))
     
-    bot.send_message(ADMIN_ID, f"🆕 Yangi foydalanuvchi:\n👤 Ism: {full_name}\n🆔 ID: {user_id}", reply_markup=markup)
-    bot.send_message(message.chat.id, "Ma'lumotlaringiz adminga yuborildi. Tasdiqlashni kuting... ⏳")
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, 
+                   caption=f"📸 Rasm: {name}\n🆔 {user_id}", reply_markup=markup)
+    bot.send_message(message.chat.id, "Rasm adminga yuborildi. Yana rasm yuborishingiz yoki boshqa tugmani bosishingiz mumkin.")
 
-# --- 5. TUGMALAR JAVOBI ---
+# --- Matnli tugmalar ---
+@bot.message_handler(func=lambda message: True)
+def handle_text(message):
+    user_id = message.from_user.id
+    if user_id not in users_data or not users_data[user_id].get('registered'):
+        bot.send_message(message.chat.id, "Iltimos, avval ro'yxatdan o'ting.", reply_markup=registration_button())
+        return
 
+    if message.text == "💰 Mening ballarim":
+        bot.send_message(message.chat.id, f"👤 {users_data[user_id]['name']}\n🪙 Ballaringiz: {users_data[user_id]['bal']}")
+    elif message.text == "📜 Qoidalar":
+        bot.send_message(message.chat.id, "Sifatli rasm yuboring va ball to'plang!")
+    elif message.text == "ℹ️ Bot haqida":
+        bot.send_message(message.chat.id, "Bu rasm yuborib ball yig'ish botidir.")
+    elif message.text == "🎁 Sovg'alar":
+        markup = types.InlineKeyboardMarkup()
+        for key, item in GIFTS.items():
+            markup.add(types.InlineKeyboardButton(f"{item['name']} - {item['price']} ball", callback_data=f"buy_{key}"))
+        bot.send_message(message.chat.id, f"Balingiz: {users_data[user_id]['bal']}\nSovg'ani tanlang:", reply_markup=markup)
+
+# --- Callback query (Admin va Sotib olish) ---
 @bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    if call.data.startswith('reg_ok_'):
-        # Format: reg_ok_ID_FullName
-        parts = call.data.split('_')
-        u_id = int(parts[2])
-        full_name = parts[3]
-        
-        users_data[u_id] = {'registered': True, 'bal': 0, 'name': full_name}
-        bot.send_message(u_id, f"Tabriklaymiz {full_name}! Ro'yxatdan o'tdingiz va barcha bo'limlar ochildi. ✅", reply_markup=main_menu())
-        bot.edit_message_text(f"✅ {full_name} tasdiqlandi.", ADMIN_ID, call.message.message_id)
-
-    elif call.data.startswith('reg_no_'):
-        u_id = int(call.data.split('_')[2])
-        bot.send_message(u_id, "Afsuski, ro'yxatdan o'tish so'rovingiz rad etildi. ❌")
-        bot.edit_message_text("❌ Ro'yxatdan o'tish rad etildi.", ADMIN_ID, call.message.message_id)
-
-    # Ballar va sovg'alar logikasi (avvalgi koddagidek qoladi)
-    elif call.data.startswith('accept_'):
-        u_id = int(call.data.split('_')[1])
+def callback_all(call):
+    data = call.data
+    if data.startswith('reg_ok_'):
+        u_id = int(data.split('_')[2])
+        f_name = data.split('_')[3]
+        users_data[u_id] = {'registered': True, 'bal': 0, 'name': f_name}
+        bot.send_message(u_id, f"Tabriklaymiz {f_name}, tasdiqlandingiz!", reply_markup=main_menu())
+        bot.edit_message_text(f"✅ {f_name} tasdiqlandi.", ADMIN_ID, call.message.message_id)
+    
+    elif data.startswith('pic_ok_'):
+        u_id = int(data.split('_')[2])
         users_data[u_id]['bal'] += 2
         bot.send_message(u_id, "Rasmingiz tasdiqlandi! +2 ball ✅")
-        bot.edit_message_caption("Tasdiqlandi ✅", ADMIN_ID, call.message.message_id)
+        bot.edit_message_caption("✅ Tasdiqlandi", ADMIN_ID, call.message.message_id)
 
-    elif call.data.startswith('buy_'):
-        gift_key = call.data.split('_')[1]
+    elif data.startswith('buy_'):
+        gift_key = data.split('_')[1]
         gift = GIFTS[gift_key]
         u_id = call.from_user.id
         if users_data[u_id]['bal'] >= gift['price']:
             users_data[u_id]['bal'] -= gift['price']
             bot.send_message(u_id, f"🎉 {gift['name']} sotib olindi!")
-            bot.send_message(ADMIN_ID, f"🔔 XARID: {users_data[u_id]['name']} - {gift['name']}")
+            bot.send_message(ADMIN_ID, f"🔔 Xarid: {users_data[u_id]['name']} - {gift['name']}")
         else:
-            bot.answer_callback_query(call.id, "Ball yetarli emas! ❌", show_alert=True)
+            bot.answer_callback_query(call.id, "Ball yetarli emas!", show_alert=True)
 
-# --- MATNLI TUGMALAR (About, Rules, Balance) ---
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    user_id = message.from_user.id
-    if user_id not in users_data or not users_data[user_id].get('registered'):
-        bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!", reply_markup=registration_button())
-        return
-
-    if message.text == "💰 Mening ballarim":
-        user = users_data[user_id]
-        bot.send_message(message.chat.id, f"👤 {user['name']}\n🪙 Ballaringiz: {user['bal']}")
-    elif message.text == "📜 Qoidalar":
-        bot.send_message(message.chat.id, "1. Rasm yuboring.\n2. Ball yig'ing.\n3. Sovg'a oling.")
-    elif message.text == "ℹ️ Bot haqida":
-        bot.send_message(message.chat.id, "Bu ball yig'ish va sovg'alar olish botidir.")
-
-# --- 6. ISHGA TUSHIRISH ---
+# --- ISHGA TUSHIRISH ---
 def run_bot():
     while True:
         try:
             bot.remove_webhook()
-            bot.polling(none_stop=True)
+            bot.polling(none_stop=True, interval=0, timeout=20)
         except:
             time.sleep(5)
 
