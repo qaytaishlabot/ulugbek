@@ -3,7 +3,7 @@ from telebot import types
 import sqlite3
 
 # Tokeningiz o'rnatilgan
-TOKEN = '8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ'
+TOKEN = '8615427119:AAEnQffiDdQ1NHRHa1e3GLDqDsZEBymy7jg'
 bot = telebot.TeleBot(TOKEN)
 
 # Ma'lumotlar bazasini sozlash
@@ -87,3 +87,4 @@ def save_user(message):
 if __name__ == "__main__":
     init_db()
     bot.infinity_polling()
+
