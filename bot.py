@@ -2,11 +2,11 @@ import telebot
 from telebot import types
 import sqlite3
 
+# Tokeningiz o'rnatilgan
 TOKEN = '8615427119:AAG3rXwxXTGqvhVBzV-VSrHQllpco3CMqaQ'
 bot = telebot.TeleBot(TOKEN)
-ADMIN_ID = 12345678  # BU YERGA O'ZINGIZNING TELEGRAM ID-INGIZNI YOZING
 
-# --- MA'LUMOTLAR BAZASI BILAN ISHLASH ---
+# Ma'lumotlar bazasini sozlash
 def init_db():
     conn = sqlite3.connect('eco_bot.db')
     cursor = conn.cursor()
@@ -15,71 +15,75 @@ def init_db():
     conn.commit()
     conn.close()
 
-def add_user(user_id, name):
-    conn = sqlite3.connect('eco_bot.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (id, name, points) VALUES (?, ?, 0)", (user_id, name))
-    conn.commit()
-    conn.close()
-
-def get_user_points(user_id):
+# Foydalanuvchi ballini olish
+def get_points(user_id):
     conn = sqlite3.connect('eco_bot.db')
     cursor = conn.cursor()
     cursor.execute("SELECT points FROM users WHERE id = ?", (user_id,))
-    result = cursor.fetchone()
+    res = cursor.fetchone()
     conn.close()
-    return result[0] if result else 0
+    return res[0] if res else 0
 
-def get_top_users():
+# Reytingni olish (TOP 10)
+def get_top():
     conn = sqlite3.connect('eco_bot.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT name, points FROM users ORDER BY points DESC LIMIT 10")
+    cursor.execute("SELECT name, points FROM users WHERE points > 0 ORDER BY points DESC LIMIT 10")
     top = cursor.fetchall()
     conn.close()
     return top
 
-# --- BOT INTERFEYSI ---
 @bot.message_handler(commands=['start'])
 def start(message):
     init_db()
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("📝 Ro'yxatdan o'tish", "🗑 Axlat tashlash", "🎁 Sovg'alar", "⭐ Ballarim", "📜 Qoidalar", "🏆 Reyting")
-    bot.send_message(message.chat.id, "Professional Eco-Botga xush kelibsiz!", reply_markup=markup)
+    markup.add("📝 Ro'yxatdan o'tish")
+    markup.add("🗑 Axlat tashlash", "🎁 Sovg'alar")
+    markup.add("⭐ Ballarim", "🏆 Reyting")
+    markup.add("📜 Qoidalar", "ℹ️ Bot haqida")
+    bot.send_message(message.chat.id, "Xush kelibsiz! Maqsadi tabiatni asrash bo'lgan loyiha botiga xush kelibsiz.", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
-def handle_all(message):
-    text = message.text
+def handle_menu(message):
+    msg = message.text
     user_id = message.from_user.id
 
-    if "Ro'yxatdan o'tish" in text:
-        msg = bot.send_message(message.chat.id, "Ismingizni kiriting:")
-        bot.register_next_step_handler(msg, process_registration)
-
-    elif "Axlat tashlash" in text:
-        bot.send_message(message.chat.id, "Rasm yuboring, adminlar tekshirib ball berishadi! 📸")
-
-    elif "Ballarim" in text:
-        points = get_user_points(user_id)
-        bot.send_message(message.chat.id, f"Sizning joriy ballingiz: {points} ⭐")
-
-    elif "Reyting" in text:
-        top = get_top_users()
-        if not top:
-            bot.send_message(message.chat.id, "Reyting hali shakllanmadi.")
+    if "Axlat tashlash" in msg:
+        bot.send_message(message.chat.id, "Iltimos, rasm yuboring! 📸 Adminlar tekshirib ball berishadi.")
+    
+    elif "Ballarim" in msg:
+        p = get_points(user_id)
+        bot.send_message(message.chat.id, f"Sizning hozirgi ballingiz: {p} ball. ⭐")
+    
+    elif "Reyting" in msg:
+        top_list = get_top()
+        if not top_list:
+            bot.send_message(message.chat.id, "🏆 Reyting hali shakllanmadi (ball olganlar yo'q).")
         else:
-            res = "🏆 TOP-10 Foydalanuvchilar:\n\n"
-            for i, (name, pts) in enumerate(top, 1):
-                res += f"{i}. {name} — {pts} ball\n"
-            bot.send_message(message.chat.id, res)
+            text = "🏆 TOP Foydalanuvchilar:\n\n"
+            for i, (name, pts) in enumerate(top_list, 1):
+                text += f"{i}. {name} — {pts} ball\n"
+            bot.send_message(message.chat.id, text)
 
-    elif "Sovg'alar" in text:
-        bot.send_message(message.chat.id, "🎁 Sovg'alar:\n- 30 ball: Ruchka\n- 50 ball: Daftar\n- 75 ball: Kitob")
+    elif "Sovg'alar" in msg:
+        bot.send_message(message.chat.id, "🎁 Sovg'alar:\n• 30 ball — Ruchka\n• 50 ball — Daftar\n• 75 ball — Kitob")
+    
+    elif "Qoidalar" in msg:
+        bot.send_message(message.chat.id, "📜 Qoida: Rasmni aniq oling va admin javobini kuting.")
 
-def process_registration(message):
-    add_user(message.from_user.id, message.text)
-    bot.send_message(message.chat.id, f"Rahmat, {message.text}! Siz ro'yxatdan o'tdingiz.")
+    elif "Ro'yxatdan o'tish" in msg:
+        m = bot.send_message(message.chat.id, "Ism va familiyangizni yuboring:")
+        bot.register_next_step_handler(m, save_user)
 
-# Botni yurgizish
+def save_user(message):
+    conn = sqlite3.connect('eco_bot.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO users (id, name, points) VALUES (?, ?, ?)", 
+                   (message.from_user.id, message.text, get_points(message.from_user.id)))
+    conn.commit()
+    conn.close()
+    bot.send_message(message.chat.id, f"Rahmat, {message.text}! Ro'yxatga olindi.")
+
 if __name__ == "__main__":
     init_db()
     bot.infinity_polling()
