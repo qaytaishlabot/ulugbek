@@ -114,3 +114,4 @@ def callback_handler(call):
 if __name__ == "__main__":
     print("Bot muvaffaqiyatli ishga tushdi...")
     bot.polling(none_stop=True)
+
