@@ -38,8 +38,9 @@ def handle_msg(message):
         bot.send_message(message.chat.id, "Menyudan foydalaning.")
 
 # 4. TO'G'RI ISHGA TUSHIRISH (Xato shu yerda edi)
-if name == "__main__":
+if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.start()
     print("Bot muvaffaqiyatli ishga tushdi!")
     bot.infinity_polling()
+
