@@ -5,7 +5,7 @@ import threading
 from flask import Flask
 import time
 from datetime import date
-import random  # rasmni AI tekshiruv imitatsiyasi uchun
+import random  # AI / CV imitatsiyasi uchun
 
 # --- 1. SOZLAMALAR ---
 API_TOKEN = '8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo'
@@ -34,7 +34,7 @@ def home():
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("🎁 Sovg'alar", "💰 Mening ballarim")
-    markup.row("📸 Rasm yuborish (2 ball)")
+    markup.row("📸 Rasm yuborish")
     markup.row("ℹ️ Bot haqida", "📜 Qoidalar")
     return markup
 
@@ -68,14 +68,15 @@ def process_registration(message):
     bot.send_message(ADMIN_ID, f"🆕 Ro'yxatdan o'tish:\n👤 {full_name}\n🆔 {user_id}", reply_markup=markup)
     bot.send_message(message.chat.id, "Ma'lumotlaringiz yuborildi. Admin tasdiqlashini kuting.")
 
-# --- 3. AI / Computer Vision tekshiruv (imitatsiya) ---
-def is_trash_present(photo_file_id):
+# --- 3. Axlat turini aniqlash (imitatsiya AI) ---
+def detect_trash_type(photo_file_id):
     """
-    Marker ishlatmasdan rasmni tekshiradi.
-    Boshlang‘ichda tasodifiy True/False.
-    Keyinchalik real AI modeli bilan almashtirish mumkin.
+    Boshlanishda tasodifiy tekshiruv:
+    - 'plastic', 'paper', 'other'
+    Keyinchalik real AI/CV model bilan almashtirish mumkin
     """
-    return random.choice([True, True, True, False])  # 75% tasdiqlash
+    choice = random.choices(['plastic', 'paper', 'other'], weights=[3,3,2])[0]
+    return choice
 
 # --- 4. Rasm qabul qilish ---
 @bot.message_handler(content_types=['photo'])
@@ -85,7 +86,7 @@ def handle_photo(message):
         bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!")
         return
 
-    # Kunlik limit tekshirish
+    # Kunlik limit
     today = str(date.today())
     if user_id not in daily_limits or daily_limits[user_id]['date'] != today:
         daily_limits[user_id] = {"date": today, "used": 0}
@@ -94,16 +95,26 @@ def handle_photo(message):
         bot.send_message(message.chat.id, f"Bugun kunlik limit tugadi ({MAX_DAILY} rasm). Ertaga yana urinib ko'ring.")
         return
 
-    # AI orqali tekshirish
-    if is_trash_present(message.photo[-1].file_id):
-        users_data[user_id]['bal'] += 2
-        daily_limits[user_id]['used'] += 1
-        bot.send_message(
-            message.chat.id,
-            f"Rasmingiz tasdiqlandi! +2 ball ✅\nBugungi limit: {daily_limits[user_id]['used']}/{MAX_DAILY}"
-        )
+    # Axlat turini aniqlash
+    trash_type = detect_trash_type(message.photo[-1].file_id)
+    if trash_type == 'plastic':
+        points = 2
+        type_name = "Plastik (baklashka)"
+    elif trash_type == 'paper':
+        points = 2
+        type_name = "Qog‘oz"
     else:
-        bot.send_message(message.chat.id, "Rasmda axlat aniqlanmadi. Iltimos, rasm sifatli bo‘lsin.")
+        points = 1
+        type_name = "Oddiy musr / boshqa"
+
+    # Ball berish
+    users_data[user_id]['bal'] += points
+    daily_limits[user_id]['used'] += 1
+
+    bot.send_message(
+        message.chat.id,
+        f"Rasmingiz tasdiqlandi! ✅\nTur: {type_name}\n+{points} ball\nBugungi limit: {daily_limits[user_id]['used']}/{MAX_DAILY}"
+    )
 
 # --- 5. Matnli tugmalar ---
 @bot.message_handler(func=lambda m: True)
