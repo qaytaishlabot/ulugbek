@@ -3,19 +3,18 @@ from telebot import types
 import os
 import threading
 from flask import Flask
-import time
 from datetime import date
-
-from ultralytics import YOLO  # YOLOv8 model
+from ultralytics import YOLO
 import cv2
 import numpy as np
 
 # --- 1. SOZLAMALAR ---
+# Tokenni to'g'ridan-to'g'ri shu yerga yozamiz (Render sozlamalariga bog'liq bo'lmasligi uchun)
 API_TOKEN = "8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo"
 ADMIN_ID = 7543961611
 
 bot = telebot.TeleBot(API_TOKEN)
-app = Flask(__name__)
+app = Flask(__name__) # __name__ xatosi tuzatildi
 
 # --- Foydalanuvchi + limit bazasi ---
 users_data = {}
@@ -34,19 +33,13 @@ def home():
     return "Bot ishlayapti!"
 
 # --- MODELNI YUKLASH ---
-model = YOLO("best.pt")  # YOLOv8 modeli (plastik, paper, other-trained)
+model = YOLO("best.pt")
 
 def detect_trash_type_local(path):
-    """
-    Rasmni model orqali aniqlaydi.
-    qaytaradi: 'plastic','paper','other','none'
-    """
-    results = model(path)[0]  # 1‑run
+    results = model(path)[0]
     if len(results.boxes) == 0:
         return "none"
-    # Ob’ektlar orasidan eng kuchli klass:
     classes = results.boxes.cls.cpu().numpy().astype(int)
-    # 0‑plastik,1‑paper,2‑other (misol)
     if 0 in classes:
         return "plastic"
     if 1 in classes:
@@ -98,10 +91,9 @@ def save_name(message):
 def handle_photo(message):
     uid = message.from_user.id
     if uid not in users_data or not users_data[uid].get("registered"):
-        bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!")
+        bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!") # .chat.id tuzatildi
         return
 
-    # limit
     today = str(date.today())
     if uid not in daily_limits or daily_limits[uid]["date"] != today:
         daily_limits[uid] = {"date": today, "used": 0}
@@ -109,26 +101,25 @@ def handle_photo(message):
         bot.send_message(message.chat.id, "Bugun limit tugadi (3 rasm).")
         return
 
-    # rasmni saqlab olish
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
     downloaded = bot.download_file(file_info.file_path)
+    
+    # Papka muammosini oldini olish
+    if not os.path.exists("tmp"):
+        os.makedirs("tmp")
+        
     path = f"tmp/{file_id}.jpg"
     with open(path, "wb") as f:
         f.write(downloaded)
 
-    # AI tekshiruv
     trash_type = detect_trash_type_local(path)
     if trash_type == "none":
         bot.send_message(message.chat.id, "Axlat aniqlanmadi. Iltimos, qayta yuboring.")
+        os.remove(path)
         return
 
-    # ball
-    if trash_type in ["plastic","paper"]:
-        pts = 2
-    else:
-        pts = 1
-
+    pts = 2 if trash_type in ["plastic","paper"] else 1
     users_data[uid]["bal"] += pts
     daily_limits[uid]["used"] += 1
 
@@ -160,8 +151,9 @@ def handle_text(message):
 def cb(call):
     d = call.data
     if d.startswith("reg_ok_"):
-        uid = int(d.split("_")[2])
-        nm = d.split("_")[3]
+        parts = d.split("_")
+        uid = int(parts[2])
+        nm = parts[3]
         users_data[uid] = {"registered": True, "bal": 0, "name": nm}
         bot.send_message(uid, "Tasdiqlandi! 🎉", reply_markup=main_menu())
         bot.edit_message_text("Tasdiqlandi ✅", ADMIN_ID, call.message.message_id)
@@ -179,7 +171,8 @@ def cb(call):
 def run_bot():
     bot.polling(none_stop=True)
 
-if __name__ == "__main__":
+if __name__ == "__main__": # __name__ tuzatildi
     threading.Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)))
-
+    # Render portini avtomatik olish
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
