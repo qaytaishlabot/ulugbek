@@ -10,10 +10,17 @@ import numpy as np
 import json
 
 # --- 1. SOZLAMALAR ---
-API_TOKEN = os.getenv("8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo")  # Render Environment Variable dan oling
+# Render-dagi Environment Variable nomi bilan bir xil qildim (API_TOKEN)
+API_TOKEN = os.getenv("API_TOKEN") 
 ADMIN_ID = 7543961611
 
-bot = telebot.TeleBot(API_TOKEN)
+# Token yo'qligida xato bermasligi uchun tekshiruv
+if not API_TOKEN:
+    print("XATO: API_TOKEN topilmadi! Render-da 'Environment Variables' bo'limini tekshiring.")
+    bot = None
+else:
+    bot = telebot.TeleBot(API_TOKEN)
+
 app = Flask(__name__)
 
 # --- DATABASE ---
@@ -28,15 +35,17 @@ def load_data():
             return {"users": {}, "limits": {}}
     return {"users": {}, "limits": {}}
 
-def save_data():
-    with open(DB_FILE, "w") as f:
-        json.dump({"users": users_data, "limits": daily_limits}, f)
-
 data = load_data()
 users_data = data.get("users", {})
 daily_limits = data.get("limits", {})
 
+def save_data():
+    with open(DB_FILE, "w") as f:
+        json.dump({"users": users_data, "limits": daily_limits}, f, indent=4)
+
 # --- 2. AI MODEL ---
+# Modelni yuklash (Render-da birinchi marta o'zi yuklab oladi)
+print("YOLOv8n yuklanmoqda...")
 model = YOLO("yolov8n.pt") 
 
 def detect_trash_type_local(path):
@@ -45,6 +54,7 @@ def detect_trash_type_local(path):
         return "none"
     
     classes = results.boxes.cls.cpu().numpy().astype(int)
+    # YOLO klasslari bo'yicha (masalan, 39 - butilka/plastik)
     if 39 in classes: return "plastic"
     if 73 in classes: return "paper"
     return "other"
@@ -74,23 +84,56 @@ def home():
     return "Bot ishlayapti!"
 
 # --- BOT LOGIKASI ---
-@bot.message_handler(commands=["start"])
-def start(message):
-    uid = str(message.from_user.id)
-    if uid not in users_data or not users_data[uid].get("registered"):
-        bot.send_message(message.chat.id, "Xush kelibsiz! Botdan foydalanish uchun ro'yxatdan o'ting:", reply_markup=registration_button())
-    else:
-        bot.send_message(message.chat.id, "Asosiy menyu:", reply_markup=main_menu())
+if bot:
+    @bot.message_handler(commands=["start"])
+    def start(message):
+        uid = str(message.from_user.id)
+        if uid not in users_data or not users_data[uid].get("registered"):
+            bot.send_message(message.chat.id, "Xush kelibsiz! Botdan foydalanish uchun ro'yxatdan o'ting:", reply_markup=registration_button())
+        else:
+            bot.send_message(message.chat.id, "Asosiy menyu:", reply_markup=main_menu())
 
-# Bu yerda qolgan eski kod o‘zgarmaydi: Ro‘yxatdan o‘tish, rasm yuborish, callback, ballar va sovg‘alar
-# handle_photo va callback_query_handler funksiyalari xuddi sizning eski koddagi kabi ishlaydi
-# Faqat tokenni Environment Variable orqali oladigan qilib to‘g‘riladim
-# Flask server va threading bilan ham ishlaydi
+    @bot.message_handler(func=lambda m: m.text == "📝 Ro'yxatdan o'tish")
+    def register(message):
+        uid = str(message.from_user.id)
+        users_data[uid] = {"registered": True, "points": 0, "name": message.from_user.first_name}
+        save_data()
+        bot.send_message(message.chat.id, "Tabriklaymiz! Ro'yxatdan o'tdingiz.", reply_markup=main_menu())
+
+    @bot.message_handler(func=lambda m: m.text == "💰 Mening ballarim")
+    def show_points(message):
+        uid = str(message.from_user.id)
+        points = users_data.get(uid, {}).get("points", 0)
+        bot.send_message(message.chat.id, f"Sizning jami ballaringiz: {points}")
+
+    @bot.message_handler(content_types=['photo'])
+    def handle_photo(message):
+        uid = str(message.from_user.id)
+        bot.send_message(message.chat.id, "Rasm tahlil qilinmoqda...")
+        
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        with open("temp_img.jpg", "wb") as f:
+            f.write(downloaded_file)
+            
+        trash_type = detect_trash_type_local("temp_img.jpg")
+        
+        if trash_type != "none":
+            users_data[uid]["points"] = users_data.get(uid, {}).get("points", 0) + 5
+            save_data()
+            bot.send_message(message.chat.id, f"Topildi: {trash_type}! Sizga 5 ball berildi.")
+        else:
+            bot.send_message(message.chat.id, "Hech narsa topilmadi.")
 
 # --- ISHGA TUSHIRISH ---
 def run_bot():
-    bot.infinity_polling()
+    if bot:
+        bot.infinity_polling()
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # Botni alohida oqimda yurgizish
+    threading.Thread(target=run_bot, daemon=True).start()
+    # Flaskni port orqali ishga tushirish (Render talabi)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
