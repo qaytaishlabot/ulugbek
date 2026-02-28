@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 # --- 1. SOZLAMALAR ---
-API_TOKEN = "YOUR_BOT_TOKEN"
+API_TOKEN = "8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo"
 ADMIN_ID = 7543961611
 
 bot = telebot.TeleBot(API_TOKEN)
@@ -182,3 +182,4 @@ def run_bot():
 if __name__ == "__main__":
     threading.Thread(target=run_bot).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)))
+
