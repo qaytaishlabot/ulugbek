@@ -5,30 +5,55 @@ import threading
 from flask import Flask
 import time
 from datetime import date
-import random  # AI / CV imitatsiyasi uchun
+
+from ultralytics import YOLO  # YOLOv8 model
+import cv2
+import numpy as np
 
 # --- 1. SOZLAMALAR ---
-API_TOKEN = '8615427119:AAGlCJrpNusimALpU2GaZ304x6UvjniPLgo'
+API_TOKEN = "YOUR_BOT_TOKEN"
 ADMIN_ID = 7543961611
 
 bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
-# --- Foydalanuvchilar va limit bazasi ---
+# --- Foydalanuvchi + limit bazasi ---
 users_data = {}
-daily_limits = {}  # {user_id: {"date": "2026-02-28", "used": 0}}
-MAX_DAILY = 3  # Kunlik limit
+daily_limits = {}
+MAX_DAILY = 3
 
-# --- Sovg'alar bazasi ---
+# --- Sovg'alar ---
 GIFTS = {
     "ruchka": {"name": "🖋 Ruchka", "price": 30},
     "daftar": {"name": "📖 Daftar", "price": 50},
-    "kitob":  {"name": "📚 Kitob", "price": 80}
+    "kitob": {"name": "📚 Kitob", "price": 80},
 }
 
-@app.route('/')
+@app.route("/")
 def home():
-    return "Bot tirik!"
+    return "Bot ishlayapti!"
+
+# --- MODELNI YUKLASH ---
+model = YOLO("best.pt")  # YOLOv8 modeli (plastik, paper, other-trained)
+
+def detect_trash_type_local(path):
+    """
+    Rasmni model orqali aniqlaydi.
+    qaytaradi: 'plastic','paper','other','none'
+    """
+    results = model(path)[0]  # 1‑run
+    if len(results.boxes) == 0:
+        return "none"
+    # Ob’ektlar orasidan eng kuchli klass:
+    classes = results.boxes.cls.cpu().numpy().astype(int)
+    # 0‑plastik,1‑paper,2‑other (misol)
+    if 0 in classes:
+        return "plastic"
+    if 1 in classes:
+        return "paper"
+    if 2 in classes:
+        return "other"
+    return "none"
 
 # --- MENU TUGMALARI ---
 def main_menu():
@@ -39,138 +64,121 @@ def main_menu():
     return markup
 
 def registration_button():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("📝 Ro'yxatdan o'tish")
     return markup
 
-# --- 2. Ro'yxatdan o'tish ---
-@bot.message_handler(commands=['start'])
+# --- BOSHLASH / RO‘YXAT ---
+@bot.message_handler(commands=["start"])
 def start(message):
-    user_id = message.from_user.id
-    if user_id not in users_data or not users_data[user_id].get('registered'):
-        bot.send_message(message.chat.id, "Xush kelibsiz! Botdan foydalanish uchun ro'yxatdan o'ting:", reply_markup=registration_button())
+    uid = message.from_user.id
+    if uid not in users_data or not users_data[uid].get("registered"):
+        bot.send_message(message.chat.id, "Ro'yxatdan o'ting:", reply_markup=registration_button())
     else:
         bot.send_message(message.chat.id, "Asosiy menyu:", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: m.text == "📝 Ro'yxatdan o'tish")
 def ask_name(message):
     bot.send_message(message.chat.id, "Ism va familiyangizni kiriting:")
-    bot.register_next_step_handler(message, process_registration)
+    bot.register_next_step_handler(message, save_name)
 
-def process_registration(message):
-    user_id = message.from_user.id
-    full_name = message.text
+def save_name(message):
+    uid = message.from_user.id
+    name = message.text
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton("Tasdiqlash ✅", callback_data=f"reg_ok_{user_id}_{full_name}"),
-        types.InlineKeyboardButton("Rad etish ❌", callback_data=f"reg_no_{user_id}")
+        types.InlineKeyboardButton("Tasdiqlash ✅", callback_data=f"reg_ok_{uid}_{name}"),
+        types.InlineKeyboardButton("Rad etish ❌", callback_data=f"reg_no_{uid}")
     )
-    bot.send_message(ADMIN_ID, f"🆕 Ro'yxatdan o'tish:\n👤 {full_name}\n🆔 {user_id}", reply_markup=markup)
-    bot.send_message(message.chat.id, "Ma'lumotlaringiz yuborildi. Admin tasdiqlashini kuting.")
+    bot.send_message(ADMIN_ID, f"Ro'yxatdan o'tish:\n👤 {name}\nID: {uid}", reply_markup=markup)
+    bot.send_message(message.chat.id, "Admin tasdiqlaydi...")
 
-# --- 3. Axlat turini aniqlash (imitatsiya AI) ---
-def detect_trash_type(photo_file_id):
-    """
-    Boshlanishda tasodifiy tekshiruv:
-    - 'plastic', 'paper', 'other'
-    Keyinchalik real AI/CV model bilan almashtirish mumkin
-    """
-    choice = random.choices(['plastic', 'paper', 'other'], weights=[3,3,2])[0]
-    return choice
-
-# --- 4. Rasm qabul qilish ---
-@bot.message_handler(content_types=['photo'])
+# --- RASM QABUL QILISH ---
+@bot.message_handler(content_types=["photo"])
 def handle_photo(message):
-    user_id = message.from_user.id
-    if user_id not in users_data or not users_data[user_id].get('registered'):
+    uid = message.from_user.id
+    if uid not in users_data or not users_data[uid].get("registered"):
         bot.send_message(message.chat.id, "Avval ro'yxatdan o'ting!")
         return
 
-    # Kunlik limit
+    # limit
     today = str(date.today())
-    if user_id not in daily_limits or daily_limits[user_id]['date'] != today:
-        daily_limits[user_id] = {"date": today, "used": 0}
-
-    if daily_limits[user_id]['used'] >= MAX_DAILY:
-        bot.send_message(message.chat.id, f"Bugun kunlik limit tugadi ({MAX_DAILY} rasm). Ertaga yana urinib ko'ring.")
+    if uid not in daily_limits or daily_limits[uid]["date"] != today:
+        daily_limits[uid] = {"date": today, "used": 0}
+    if daily_limits[uid]["used"] >= MAX_DAILY:
+        bot.send_message(message.chat.id, "Bugun limit tugadi (3 rasm).")
         return
 
-    # Axlat turini aniqlash
-    trash_type = detect_trash_type(message.photo[-1].file_id)
-    if trash_type == 'plastic':
-        points = 2
-        type_name = "Plastik (baklashka)"
-    elif trash_type == 'paper':
-        points = 2
-        type_name = "Qog‘oz"
-    else:
-        points = 1
-        type_name = "Oddiy musr / boshqa"
+    # rasmni saqlab olish
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    downloaded = bot.download_file(file_info.file_path)
+    path = f"tmp/{file_id}.jpg"
+    with open(path, "wb") as f:
+        f.write(downloaded)
 
-    # Ball berish
-    users_data[user_id]['bal'] += points
-    daily_limits[user_id]['used'] += 1
+    # AI tekshiruv
+    trash_type = detect_trash_type_local(path)
+    if trash_type == "none":
+        bot.send_message(message.chat.id, "Axlat aniqlanmadi. Iltimos, qayta yuboring.")
+        return
+
+    # ball
+    if trash_type in ["plastic","paper"]:
+        pts = 2
+    else:
+        pts = 1
+
+    users_data[uid]["bal"] += pts
+    daily_limits[uid]["used"] += 1
 
     bot.send_message(
         message.chat.id,
-        f"Rasmingiz tasdiqlandi! ✅\nTur: {type_name}\n+{points} ball\nBugungi limit: {daily_limits[user_id]['used']}/{MAX_DAILY}"
+        f"Axlat turi: {trash_type}\n+{pts} ball!\nLimit: {daily_limits[uid]['used']}/3"
     )
+    os.remove(path)
 
-# --- 5. Matnli tugmalar ---
+# --- MATN TUGMALARI ---
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
-    user_id = message.from_user.id
-    if user_id not in users_data or not users_data[user_id].get('registered'):
-        bot.send_message(message.chat.id, "Iltimos, avval ro'yxatdan o'ting.", reply_markup=registration_button())
+    uid = message.from_user.id
+    if uid not in users_data or not users_data[uid].get("registered"):
+        bot.send_message(message.chat.id, "Ro'yxatdan o'ting.", reply_markup=registration_button())
         return
-
     if message.text == "💰 Mening ballarim":
-        bot.send_message(message.chat.id, f"👤 {users_data[user_id]['name']}\n🪙 Ballaringiz: {users_data[user_id]['bal']}")
-    elif message.text == "📜 Qoidalar":
-        bot.send_message(message.chat.id, "Sifatli rasm yuboring va ball to'plang! Kunlik limit: 3 rasm.")
-    elif message.text == "ℹ️ Bot haqida":
-        bot.send_message(message.chat.id, "Bu rasm yuborib ball yig'ish botidir. Rasm avtomatik tekshiriladi.")
+        bot.send_message(message.chat.id, f"Ballaringiz: {users_data[uid]['bal']}")
     elif message.text == "🎁 Sovg'alar":
         markup = types.InlineKeyboardMarkup()
-        for key, item in GIFTS.items():
-            markup.add(types.InlineKeyboardButton(f"{item['name']} - {item['price']} ball", callback_data=f"buy_{key}"))
-        bot.send_message(
-            message.chat.id,
-            f"Balingiz: {users_data[user_id]['bal']}\nSovg'ani tanlang:",
-            reply_markup=markup
-        )
+        for k,v in GIFTS.items():
+            markup.add(types.InlineKeyboardButton(f"{v['name']} - {v['price']} ball", callback_data=f"buy_{k}"))
+        bot.send_message(message.chat.id, "Sovg'ani tanlang:", reply_markup=markup)
+    else:
+        bot.send_message(message.chat.id, "🤖 Noma’lum buyruq.")
 
-# --- 6. Callback query (Admin va sotib olish) ---
+# --- CALLBACK ---
 @bot.callback_query_handler(func=lambda call: True)
-def callback_all(call):
-    data = call.data
-    if data.startswith('reg_ok_'):
-        u_id = int(data.split('_')[2])
-        f_name = data.split('_')[3]
-        users_data[u_id] = {'registered': True, 'bal': 0, 'name': f_name}
-        bot.send_message(u_id, f"Tabriklaymiz {f_name}, tasdiqlandingiz!", reply_markup=main_menu())
-        bot.edit_message_text(f"✅ {f_name} tasdiqlandi.", ADMIN_ID, call.message.message_id)
-    elif data.startswith('buy_'):
-        gift_key = data.split('_')[1]
-        gift = GIFTS[gift_key]
-        u_id = call.from_user.id
-        if users_data[u_id]['bal'] >= gift['price']:
-            users_data[u_id]['bal'] -= gift['price']
-            bot.send_message(u_id, f"🎉 {gift['name']} sotib olindi!")
-            bot.send_message(ADMIN_ID, f"🔔 Xarid: {users_data[u_id]['name']} - {gift['name']}")
+def cb(call):
+    d = call.data
+    if d.startswith("reg_ok_"):
+        uid = int(d.split("_")[2])
+        nm = d.split("_")[3]
+        users_data[uid] = {"registered": True, "bal": 0, "name": nm}
+        bot.send_message(uid, "Tasdiqlandi! 🎉", reply_markup=main_menu())
+        bot.edit_message_text("Tasdiqlandi ✅", ADMIN_ID, call.message.message_id)
+    elif d.startswith("buy_"):
+        g = d.split("_")[1]
+        uid = call.from_user.id
+        price = GIFTS[g]["price"]
+        if users_data[uid]["bal"] >= price:
+            users_data[uid]["bal"] -= price
+            bot.send_message(uid, f"Sovg'a: {GIFTS[g]['name']} 🎁")
         else:
-            bot.answer_callback_query(call.id, "Ball yetarli emas!", show_alert=True)
+            bot.answer_callback_query(call.id, "Ball yetarli emas!")
 
-# --- 7. Ishga tushirish ---
+# --- BOTNI ISHGA TUSHIRISH ---
 def run_bot():
-    while True:
-        try:
-            bot.remove_webhook()
-            bot.polling(none_stop=True, interval=0, timeout=20)
-        except:
-            time.sleep(5)
+    bot.polling(none_stop=True)
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)))
