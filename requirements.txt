@@ -1,6 +1,7 @@
-pyTelegramBotAPI
-flask
-ultralytics
-opencv-python-headless
-numpy
+pyTelegramBotAPI==4.10.0
+Flask==2.3.6
+ultralytics==8.0.134
+opencv-python-headless==4.7.0.72```
+numpy==1.26.0
+
 
