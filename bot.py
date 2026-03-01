@@ -10,11 +10,9 @@ import numpy as np
 import json
 
 # --- 1. SOZLAMALAR ---
-# Render-dagi Environment Variable nomi bilan bir xil qildim (API_TOKEN)
 API_TOKEN = os.getenv("API_TOKEN") 
 ADMIN_ID = 7543961611
 
-# Token yo'qligida xato bermasligi uchun tekshiruv
 if not API_TOKEN:
     print("XATO: API_TOKEN topilmadi! Render-da 'Environment Variables' bo'limini tekshiring.")
     bot = None
@@ -44,7 +42,6 @@ def save_data():
         json.dump({"users": users_data, "limits": daily_limits}, f, indent=4)
 
 # --- 2. AI MODEL ---
-# Modelni yuklash (Render-da birinchi marta o'zi yuklab oladi)
 print("YOLOv8n yuklanmoqda...")
 model = YOLO("yolov8n.pt") 
 
@@ -54,7 +51,6 @@ def detect_trash_type_local(path):
         return "none"
     
     classes = results.boxes.cls.cpu().numpy().astype(int)
-    # YOLO klasslari bo'yicha (masalan, 39 - butilka/plastik)
     if 39 in classes: return "plastic"
     if 73 in classes: return "paper"
     return "other"
@@ -116,13 +112,28 @@ if bot:
         
         with open("temp_img.jpg", "wb") as f:
             f.write(downloaded_file)
-            
-        trash_type = detect_trash_type_local("temp_img.jpg")
-        
-        if trash_type != "none":
-            users_data[uid]["points"] = users_data.get(uid, {}).get("points", 0) + 5
+
+        # --- Yangi ball tizimi: plastik / bakalashka / qogoz → 2 ball, qolgan → 1 ball ---
+        def get_bonus_points(path):
+            results = model(path, conf=0.3)[0]
+            classes = results.boxes.cls.cpu().numpy().astype(int)
+            trash_in_background = len(results.boxes) > 1  # rasmda boshqa axlat bo‘lsa
+
+            if not trash_in_background:
+                return 0  # shunchaki ushlab turib yuborsa → ball yo‘q
+
+            # Plastik / bakalashka / qogoz
+            if any(cls in [39, 73] for cls in classes):
+                return 2
+            elif len(classes) > 0:  # boshqa chiqindi
+                return 1
+            return 0
+
+        bonus_points = get_bonus_points("temp_img.jpg")
+        if bonus_points > 0:
+            users_data[uid]["points"] = users_data.get(uid, {}).get("points", 0) + bonus_points
             save_data()
-            bot.send_message(message.chat.id, f"Topildi: {trash_type}! Sizga 5 ball berildi.")
+            bot.send_message(message.chat.id, f"🎉 Sizga {bonus_points} ball berildi: chiqindi + axlat fonida!")
         else:
             bot.send_message(message.chat.id, "Hech narsa topilmadi.")
 
@@ -132,8 +143,6 @@ def run_bot():
         bot.infinity_polling()
 
 if __name__ == "__main__":
-    # Botni alohida oqimda yurgizish
     threading.Thread(target=run_bot, daemon=True).start()
-    # Flaskni port orqali ishga tushirish (Render talabi)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
